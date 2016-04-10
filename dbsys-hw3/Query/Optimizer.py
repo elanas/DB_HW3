@@ -54,12 +54,53 @@ class Optimizer:
   def getPlanCost(self, plan):
     raise NotImplementedError
 
+  def removeUnaryPlan(self, plan):
+    selectList = []
+    q = []
+    q.append((plan.root,None, ""))
+
+    while len(q) > 0:
+      (currNode, pNode, sub) = q.pop()
+      if currNode.operatorType() == "Select":
+        selectList.append(currNode)
+        q.append((currNode.subPlan, currNode, "only"))
+        if sub == "only":
+          pNode.subPlan = currNode.subPlan
+        elif sub == "left":
+          pNode.lhsPlan = currNode.subPlan
+        elif sub == "right":
+          pNode.rhsPlan = currNode.subPlan
+        else:
+          plan.root = currNode.subPlan
+      elif currNode.operatorType() == "Project":
+        #TODO add implementation
+        continue
+      elif currNode.operatorType() == "TableScan":
+        continue
+      elif currNode.operatorType() == "GroupBy" or currNode.operatorType() == "Sort":
+        q.append((currNode.subPlan, currNode, "only"))
+      else: #join and union
+        q.append((currNode.lhsPlan, currNode, "left"))
+        q.append((currNode.rhsPlan, currNode, "right"))
+    
+    return (plan,selectList)
+
+  def decompSelects(self,selectList):
+    decompList = []
+
+    for s in selectList:
+      exprList = ExpressionInfo(s.selectExpr).decomposeCNF()
+      for e in exprList:
+        select = Select(None,e)
+        decompList.append(select)
+    return decompList
   # Given a plan, return an optimized plan with both selection and
   # projection operations pushed down to their nearest defining relation
   # This does not need to cascade operators, but should determine a
   # suitable ordering for selection predicates based on the cost model below.
   def pushdownOperators(self, plan):
-    raise NotImplementedError
+    (removedPlan,selectList) = self.removeUnaryPlan(plan)
+    decompList = self.decompSelects(selectList)
 
   # Returns an optimized query plan with joins ordered via a System-R style
   # dyanmic programming algorithm. The plan cost should be compared with the
