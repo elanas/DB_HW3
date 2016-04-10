@@ -55,6 +55,7 @@ class Optimizer:
     raise NotImplementedError
 
   def removeUnaryPlan(self, plan):
+    fieldDict = {}
     selectList = []
     q = []
     q.append((plan.root,None, ""))
@@ -76,6 +77,8 @@ class Optimizer:
         #TODO add implementation
         continue
       elif currNode.operatorType() == "TableScan":
+        for f in currNode.schema.fields:
+          fieldDict[f] = (pNode,sub)
         continue
       elif currNode.operatorType() == "GroupBy" or currNode.operatorType() == "Sort":
         q.append((currNode.subPlan, currNode, "only"))
@@ -83,7 +86,7 @@ class Optimizer:
         q.append((currNode.lhsPlan, currNode, "left"))
         q.append((currNode.rhsPlan, currNode, "right"))
     
-    return (plan,selectList)
+    return (plan,selectList,fieldDict)
 
   def decompSelects(self,selectList):
     decompList = []
@@ -99,8 +102,27 @@ class Optimizer:
   # This does not need to cascade operators, but should determine a
   # suitable ordering for selection predicates based on the cost model below.
   def pushdownOperators(self, plan):
-    (removedPlan,selectList) = self.removeUnaryPlan(plan)
+    (removedPlan,selectList,fieldDict) = self.removeUnaryPlan(plan)
     decompList = self.decompSelects(selectList)
+
+    for s in decompList:
+      attrList = ExpressionInfo(s.selectExpr).getAttributes()
+      if len(attrList) == 1:
+        (pNode, sub) = fieldDict[attrList[0]]
+        if sub == "only":
+          pNode.subPlan = s
+        elif sub == "left":
+          pNode.lhsPlan = s
+        elif sub == "right":
+          pNode.rhsPlan = s
+        else:
+          removedPlan.root = s
+      else:
+        #TODO handle selects with multiple attributes (and dealing with projects)
+        removedPlan.root = s
+      
+      return removedPlan
+    
 
   # Returns an optimized query plan with joins ordered via a System-R style
   # dyanmic programming algorithm. The plan cost should be compared with the
