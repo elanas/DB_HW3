@@ -38,7 +38,12 @@ class Optimizer:
         .where('eid > 0 and id > 0 and (eid == 5 or id == 6)')\
         .select({'id': ('id', 'int'), 'eid':('eid','int')}).finalize()
 
-  >>> db.optimizer.pushdownOperators(query5)
+  # Pushdown Optimization
+  >>> query6 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
+        db.query().fromTable('department'), \
+        method='block-nested-loops', expr='id == eid')\
+        .where('eid > 0 and id > 0 and (eid == 5 or id == 6)').finalize()
+  >>> print(db.optimizer.pushdownOperators(query6).explain())
 
   """
 
@@ -77,7 +82,7 @@ class Optimizer:
         #TODO add implementation
         continue
       elif currNode.operatorType() == "TableScan":
-        for f in currNode.schema.fields:
+        for f in currNode.schema().fields:
           fieldDict[f] = (pNode,sub)
         continue
       elif currNode.operatorType() == "GroupBy" or currNode.operatorType() == "Sort":
@@ -96,7 +101,7 @@ class Optimizer:
       for e in exprList:
         select = Select(None,e)
         decompList.append(select)
-    return decompList
+      return decompList
   # Given a plan, return an optimized plan with both selection and
   # projection operations pushed down to their nearest defining relation
   # This does not need to cascade operators, but should determine a
@@ -104,24 +109,35 @@ class Optimizer:
   def pushdownOperators(self, plan):
     (removedPlan,selectList,fieldDict) = self.removeUnaryPlan(plan)
     decompList = self.decompSelects(selectList)
-
+    f = open("attr.txt", "a")
+    f.write(str(len(decompList)))
+    f.close()
     for s in decompList:
+      f = open("decomp.txt", "a")
+      f.write(str(len(decompList)))
+      f.close()
       attrList = ExpressionInfo(s.selectExpr).getAttributes()
+
       if len(attrList) == 1:
-        (pNode, sub) = fieldDict[attrList[0]]
+        (pNode, sub) = fieldDict[attrList.pop()]
         if sub == "only":
+          s.subPlan = pNode.subPlan
           pNode.subPlan = s
         elif sub == "left":
+          s.subPlan = pNode.lhsPlan
           pNode.lhsPlan = s
         elif sub == "right":
+          s.subPlan = pNode.rhsPlan
           pNode.rhsPlan = s
         else:
+          s.subPlan = removedPlan.root
           removedPlan.root = s
       else:
         #TODO handle selects with multiple attributes (and dealing with projects)
+        s.subPlan = removedPlan.root
         removedPlan.root = s
       
-      return removedPlan
+    return removedPlan
     
 
   # Returns an optimized query plan with joins ordered via a System-R style
