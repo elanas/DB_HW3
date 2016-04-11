@@ -109,16 +109,11 @@ class Optimizer:
   def pushdownOperators(self, plan):
     (removedPlan,selectList,fieldDict) = self.removeUnaryPlan(plan)
     decompList = self.decompSelects(selectList)
-    f = open("attr.txt", "a")
-    f.write(str(len(decompList)))
-    f.close()
+    
     for s in decompList:
-      f = open("decomp.txt", "a")
-      f.write(str(len(decompList)))
-      f.close()
       attrList = ExpressionInfo(s.selectExpr).getAttributes()
 
-      if len(attrList) == 1:
+      if len(attrList) == 1: #TODO should really be number of sources, not num attributes
         (pNode, sub) = fieldDict[attrList.pop()]
         if sub == "only":
           s.subPlan = pNode.subPlan
@@ -139,12 +134,106 @@ class Optimizer:
       
     return removedPlan
     
+  
+  def getLeg(self, relId, plan):
+    currPlan = plan
+
+    while (len(currPlan.relations()) > 1) and (relId in currPlan.relations()):
+      currNode = currPlan.root
+      if len(currNode.inputs()) > 1:
+        if relId in currNode.lhsPlan.relations():
+          currPlan = currNode.lhsPlan
+        else:
+          currPlan = currNode.rhsPlan        
+      else:
+        currPlan = currNode.subPlan
+
+    if relId in currPlan.relations():
+      return currPlan
+
+    return None  
+
+
+  def obtainFieldDict(self, plan):
+    #TODO implement. Should map attr name -> relId
+    raise NotImplementedError
+
+  def getExprDicts(self,plan, fieldDict):
+    q = []
+    q.append(plan.root)
+    selectTablesDict = {} # mapping of relation list to list of exprs using them: [A,B] -> [a < b, etc]
+    JoinTablesDict = {} # same thing but for joins, not selects 
+
+    while len(q) > 0:
+      currNode = q.pop()
+
+      if (currNode.operatorType() == "Select"):
+        #all selects were already decomposed in pushdown
+        attrList = ExpressionInfo(currNode.selectExpr).getAttributes()
+        sourceList = [] #TODO this approach should be used in pushdown also
+        for attr in attrList: #Could be more than 2! (a<b or c>1)
+          source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
+          if source not in sourceList:
+            sourceList.append(source)
+
+        sourceList.sort()
+        if sourceList not in selectTablesDict:
+          selectTablesDict[sourceList] = []
+        selectTablesDict[sourceList].append(currNode.selectExpr)
+ 
+      elif currNode.operatorType() == "Join":
+        # TODO (what if some join exprs are from BNLJ and others from Hash?
+
+        joinExprList = ExpressionInfo(currNode.joinExpr).decomposeCNF()
+        for joinExpr in joinExprList:
+          attrList = ExpressionInfo(joinExpr).getAttributes()
+          sourceList = [] #TODO this approach should be used in pushdown also
+          for attr in attrList: #Could be more than 2! (a<b or c>1)
+            source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
+            if source not in sourceList:
+              sourceList.append(source)
+
+          sourceList.sort()
+          if sourceList not in joinTablesDict:
+            joinTablesDict[sourceList] = []
+          joinTablesDict[sourceList].append(currNode.selectExpr)
+        
+
+      if len(currNode.inputs()) > 1:
+        q.append(currNode.lhsPlan)
+        q.append(currNode.rhsPlan)
+      else:
+        q.append(currNode.subPlan)
+
+
+    return (joinTablesDict, selectTablesDict)
+
 
   # Returns an optimized query plan with joins ordered via a System-R style
   # dyanmic programming algorithm. The plan cost should be compared with the
   # use of the cost model below.
   def pickJoinOrder(self, plan):
-    raise NotImplementedError
+    relations = plan.relations()
+    fieldDict = self.obtainFieldDict(plan)
+    (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
+    # makes dicts that maps a list of relations to exprs involving that list
+    # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
+    # and on top of it the select exprs that involve 2 tables A,C or B,C
+
+    for npass in range(len(relations)):
+      npass += 1
+      if npass == 1: #pass 1 case
+        for rel in relations:
+          self.statsCache[rel] = self.getLeg(rel, plan) 
+      else:
+        #TODO pass n case
+        pass
+
+      
+  #TODO perhaps combine several of the pre-traversals into one function that finds everything out about
+  # the input plan in one traversal and call it at start of optimize query, passing info into push/reorder
+  # or maybe we do this approach but with 2 traversal, one that we use in pushdown to get all we need there
+  # and one for join ordering
 
   # Optimize the given query plan, returning the resulting improved plan.
   # This should perform operation pushdown, followed by join order selection.
