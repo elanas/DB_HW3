@@ -26,6 +26,27 @@ class Join(Operator):
     self.initializeSchema()
     self.initializeMethod(**kwargs)
 
+  def localCost(self, estimated):
+    tupleSizeLeft = self.lhsPlan.schema().size
+    numTuplesLeft = self.lhsPlan.cardinality(estimated)
+    tuplesSizeRight = self.rhsPlan.schema().size
+    numTuplesRight = self.rhsPlan.cardinality(estimated)
+    pageSize = self.storage.bufferPool.pageSize
+
+    numPagesLeft = (tupeSizeLeft * numTuplesLeft) // pageSize
+    numPagesRight = (tupeSizeRight * numTuplesRight) // pageSize
+
+    if self.joinMethod == "nested-loops":
+      return (numTuplesLeft * numPagesRight) + numPagesLeft
+    elif self.joinMethod == "block-nested-loops":
+      return numPagesLeft + ((numPagesLeft // (self.storage.bufferPool.numPages() - 2)) * numPagesRight)
+    elif self.joinMethod == "indexed":
+      raise NotImplementedError
+    elif self.joinMethod == "hash":
+      return 3 * (numPagesLeft + numPagesRight)
+    else:
+      return None
+  
   # Checks the join parameters.
   def validateJoin(self):
     # Valid join methods: "nested-loops", "block-nested-loops", "indexed", "hash"
