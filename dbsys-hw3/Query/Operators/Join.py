@@ -33,8 +33,8 @@ class Join(Operator):
     numTuplesRight = self.rhsPlan.cardinality(estimated)
     pageSize = self.storage.bufferPool.pageSize
 
-    numPagesLeft = (tupeSizeLeft * numTuplesLeft) // pageSize
-    numPagesRight = (tupeSizeRight * numTuplesRight) // pageSize
+    numPagesLeft = (tupleSizeLeft * numTuplesLeft) // pageSize
+    numPagesRight = (tupleSizeRight * numTuplesRight) // pageSize
 
     if self.joinMethod == "nested-loops":
       return (numTuplesLeft * numPagesRight) + numPagesLeft
