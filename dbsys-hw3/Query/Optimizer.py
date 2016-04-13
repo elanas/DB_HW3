@@ -134,26 +134,6 @@ class Optimizer:
       
     return removedPlan
     
-  
-  def getLeg(self, relId, plan):
-    currPlan = plan
-
-    while (len(currPlan.relations()) > 1) and (relId in currPlan.relations()):
-      currNode = currPlan.root
-      if len(currNode.inputs()) > 1:
-        if relId in currNode.lhsPlan.relations():
-          currPlan = currNode.lhsPlan
-        else:
-          currPlan = currNode.rhsPlan        
-      else:
-        currPlan = currNode.subPlan
-
-    if relId in currPlan.relations():
-      return currPlan
-
-    return None  
-
-
   def obtainFieldDict(self, plan):
     q = []
     q.append(plan.root)
@@ -171,8 +151,6 @@ class Optimizer:
         q.append(i)
     
     return (joinTablesDict, selectTablesDict)
-
-
 
   def getExprDicts(self,plan, fieldDict):
     q = []
@@ -236,16 +214,30 @@ class Optimizer:
     # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
     # and on top of it the select exprs that involve 2 tables A,C or B,C
 
-    for npass in range(len(relations)):
-      npass += 1
-      if npass == 1: #pass 1 case
-        for rel in relations:
-          self.statsCache[rel] = self.getLeg(rel, plan) 
-      else:
-        #TODO pass n case
-        pass
+    optDict = {}
 
-      
+    for npass in range(1, len(relations) + 1):
+      if npass == 1:
+        for r in relations:
+          table = TableScan(r,self.db.relationSchema(r))
+          selectExprs = selectTablesDict[[r]]
+          selectString = combineSelects(selectExprs)
+          select = Select(table,selectString)
+          optDict[[r]] = select
+      else:
+        combinations = itertools.combinations(relations,n)
+            
+
+  def combineSelects(self,selectExprs):
+    ##TODO: we could sort selects to order based on Selectivity
+    selectString = ""
+    for s in selectExprs:
+      selectString += s
+      selectString += " and "
+
+    selectString = selectString[:len(selectString) - 5]
+    return selectString
+
   #TODO perhaps combine several of the pre-traversals into one function that finds everything out about
   # the input plan in one traversal and call it at start of optimize query, passing info into push/reorder
   # or maybe we do this approach but with 2 traversal, one that we use in pushdown to get all we need there
