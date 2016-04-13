@@ -155,8 +155,24 @@ class Optimizer:
 
 
   def obtainFieldDict(self, plan):
-    #TODO implement. Should map attr name -> relId
-    raise NotImplementedError
+    q = []
+    q.append(plan.root)
+    
+    attrDict = {}
+
+    while len(q) > 0:
+      currNode = q.pop()
+
+      if currNode.operatorType() == "TableScan":
+        for f in currNode.schema().fields:
+          attrDict[f] = currNode.relationId()
+
+      for i in currNode.inputs():
+        q.append(i)
+    
+    return (joinTablesDict, selectTablesDict)
+
+
 
   def getExprDicts(self,plan, fieldDict):
     q = []
