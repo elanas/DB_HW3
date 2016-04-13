@@ -27,7 +27,7 @@ class Select(Operator):
 
   def __iter__(self):
     self.initializeOutput()
-    self.inputIterator = iter(self.subPlan)
+    self.inputIterator = self.subPlan
     self.inputFinished = False
 
     if not self.pipelined:
@@ -69,7 +69,7 @@ class Select(Operator):
   # Set-at-a-time operator processing
   def processAllPages(self):
     if self.inputIterator is None:
-      self.inputIterator = iter(self.subPlan)
+      self.inputIterator = self.subPlan
 
     # Process all pages from the child operator.
     try:

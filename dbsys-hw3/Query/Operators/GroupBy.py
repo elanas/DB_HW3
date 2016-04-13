@@ -18,14 +18,17 @@ class GroupBy(Operator):
 
     self.validateGroupBy()
     self.initializeSchema()
-  
+
+   
   def localCost(self, estimated):
     tupleSize = self.subPlan.schema().size
     numTuples = self.subPlan.cardinality(estimated)
     pageSize = self.storage.bufferPool.pageSize
     numPages = (tupleSize * numTuples) // pageSize
-
+ 
     return 2 * numPages #derived from: http://www4.comp.polyu.edu.hk/~csmlyiu/conf/CIKM09_skygroup.pdf with the assumption that G=1 and therefore the log value will be close to 1
+
+
   # Perform some basic checking on the group-by operator's parameters.
   def validateGroupBy(self):
     requireAllValid = [self.subPlan, \
@@ -98,7 +101,7 @@ class GroupBy(Operator):
   # Set-at-a-time operator processing
   def processAllPages(self):
     # Create partitions of the input records by hashing the group-by values
-    for (pageId, page) in iter(self.subPlan):
+    for (pageId, page) in self.subPlan:
       for tup in page:
         groupVal = self.ensureTuple(self.groupExpr(self.subSchema.unpack(tup)))
         groupId = self.groupHashFn(groupVal)

@@ -150,12 +150,12 @@ class Join(Operator):
   # Nested loops implementation
   #
   def nestedLoops(self):
-    for (lPageId, lhsPage) in iter(self.lhsPlan):
+    for (lPageId, lhsPage) in self.lhsPlan:
       for lTuple in lhsPage:
         # Load the lhs once per inner loop.
         joinExprEnv = self.loadSchema(self.lhsSchema, lTuple)
 
-        for (rPageId, rhsPage) in iter(self.rhsPlan):
+        for (rPageId, rhsPage) in self.rhsPlan:
           for rTuple in rhsPage:
             # Load the RHS tuple fields.
             joinExprEnv.update(self.loadSchema(self.rhsSchema, rTuple))
@@ -209,7 +209,7 @@ class Join(Operator):
           # Load the lhs once per inner loop.
           joinExprEnv = self.loadSchema(self.lhsSchema, lTuple)
 
-          for (rPageId, rhsPage) in iter(self.rhsPlan):
+          for (rPageId, rhsPage) in self.rhsPlan:
             for rTuple in rhsPage:
               # Load the RHS tuple fields.
               joinExprEnv.update(self.loadSchema(self.rhsSchema, rTuple))
@@ -244,7 +244,7 @@ class Join(Operator):
       raise ValueError("Missing index in storage manager: %s" % self.indexId)
     if self.indexId:
       bufPool = self.storage.bufferPool
-      for (lPageId, lhsPage) in iter(self.lhsPlan):
+      for (lPageId, lhsPage) in self.lhsPlan:
         for lTuple in lhsPage:
           # Load the lhs once per inner loop.
           joinExprEnv = self.loadSchema(self.lhsSchema, lTuple)
@@ -284,13 +284,13 @@ class Join(Operator):
   def hashJoin(self):
     # Partition the LHS and RHS inputs, creating a temporary file for each partition.
     # We assume one-level of partitioning is sufficient and skip recurring.
-    for (lPageId, lPage) in iter(self.lhsPlan):
+    for (lPageId, lPage) in self.lhsPlan:
       for lTuple in lPage:
         lPartEnv = self.loadSchema(self.lhsSchema, lTuple)
         lPartKey = eval(self.lhsHashFn, globals(), lPartEnv)
         self.emitPartitionTuple(lPartKey, lTuple, left=True)
 
-    for (rPageId, rPage) in iter(self.rhsPlan):
+    for (rPageId, rPage) in self.rhsPlan:
       for rTuple in rPage:
         rPartEnv = self.loadSchema(self.rhsSchema, rTuple)
         rPartKey = eval(self.rhsHashFn, globals(), rPartEnv)

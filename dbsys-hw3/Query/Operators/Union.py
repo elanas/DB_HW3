@@ -33,7 +33,7 @@ class Union(Operator):
   def __iter__(self):
     self.initializeOutput()
     self.inputFinished = False
-    self.inputIterators = list(zip(map(lambda x: iter(x), self.inputs()), self.inputSchemas()))
+    self.inputIterators = list(zip(map(lambda x: x, self.inputs()), self.inputSchemas()))
 
     self.currentInputIterator = self.inputIterators[0][0]
     self.currentSchema        = self.inputIterators[0][1]
@@ -74,7 +74,7 @@ class Union(Operator):
   # Set-at-a-time operator processing
   def processAllPages(self):
     if self.inputIterators is None:
-      self.inputIterators = list(zip(map(lambda x: iter(x), self.inputs()), self.inputSchemas()))
+      self.inputIterators = list(zip(map(lambda x: x, self.inputs()), self.inputSchemas()))
 
     # Process all pages from the child operator.
     for (currentInputIterator, currentSchema) in self.inputIterators:
