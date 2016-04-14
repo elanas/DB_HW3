@@ -29,7 +29,7 @@ class Join(Operator):
   def localCost(self, estimated):
     tupleSizeLeft = self.lhsPlan.schema().size
     numTuplesLeft = self.lhsPlan.cardinality(estimated)
-    tuplesSizeRight = self.rhsPlan.schema().size
+    tupleSizeRight = self.rhsPlan.schema().size
     numTuplesRight = self.rhsPlan.cardinality(estimated)
     pageSize = self.storage.bufferPool.pageSize
 

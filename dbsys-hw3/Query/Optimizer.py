@@ -2,6 +2,7 @@ import itertools
 
 from Query.Plan import Plan
 from Query.Operators.Join import Join
+from Query.Operators.TableScan import TableScan 
 from Query.Operators.Project import Project
 from Query.Operators.Select import Select
 from Utils.ExpressionInfo import ExpressionInfo
@@ -150,53 +151,56 @@ class Optimizer:
       for i in currNode.inputs():
         q.append(i)
     
-    return (joinTablesDict, selectTablesDict)
+    return attrDict    
 
-  def getExprDicts(self,plan, fieldDict):
+  def getExprDicts(self, plan, fieldDict):
     q = []
     q.append(plan.root)
     selectTablesDict = {} # mapping of relation list to list of exprs using them: [A,B] -> [a < b, etc]
-    JoinTablesDict = {} # same thing but for joins, not selects 
+    joinTablesDict = {} # same thing but for joins, not selects 
+
+    f = open("stop.txt", "a")
 
     while len(q) > 0:
       currNode = q.pop()
-
+      f.write(currNode.operatorType() + "\n")
       if (currNode.operatorType() == "Select"):
-        #all selects were already decomposed in pushdown
+        #all selects were already decomposed in pushdown #TODO this isn't true!
         attrList = ExpressionInfo(currNode.selectExpr).getAttributes()
-        sourceList = [] #TODO this approach should be used in pushdown also
+        sourceList = [] 
         for attr in attrList: #Could be more than 2! (a<b or c>1)
           source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
           if source not in sourceList:
             sourceList.append(source)
 
-        sourceList.sort()
-        if sourceList not in selectTablesDict:
-          selectTablesDict[sourceList] = []
-        selectTablesDict[sourceList].append(currNode.selectExpr)
+        sourceTuple = tuple(sorted(sourceList))
+        if sourceTuple not in selectTablesDict:
+          selectTablesDict[sourceTuple] = []
+        selectTablesDict[sourceTuple].append(currNode.selectExpr)
+        f = open("hash.txt", "a")
+        f.write("working?")
+        f.close()
  
-      elif currNode.operatorType() == "Join":
-        # TODO (what if some join exprs are from BNLJ and others from Hash?
-
+      elif "Join" in currNode.operatorType():
         joinExprList = ExpressionInfo(currNode.joinExpr).decomposeCNF()
         for joinExpr in joinExprList:
           attrList = ExpressionInfo(joinExpr).getAttributes()
-          sourceList = [] #TODO this approach should be used in pushdown also
+          sourceList = [] 
           for attr in attrList: #Could be more than 2! (a<b or c>1)
             source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
             if source not in sourceList:
               sourceList.append(source)
 
-          sourceList.sort()
-          if sourceList not in joinTablesDict:
-            joinTablesDict[sourceList] = []
-          joinTablesDict[sourceList].append(currNode.selectExpr)
+          sourceTuple = tuple(sorted(sourceList))
+          if sourceTuple not in joinTablesDict:
+            joinTablesDict[sourceTuple] = []
+          joinTablesDict[sourceTuple].append(currNode.joinExpr)
         
 
       if len(currNode.inputs()) > 1:
         q.append(currNode.lhsPlan)
         q.append(currNode.rhsPlan)
-      else:
+      elif len(currNode.inputs()) == 1:
         q.append(currNode.subPlan)
 
 
@@ -220,13 +224,65 @@ class Optimizer:
       if npass == 1:
         for r in relations:
           table = TableScan(r,self.db.relationSchema(r))
-          selectExprs = selectTablesDict[[r]]
-          selectString = combineSelects(selectExprs)
-          select = Select(table,selectString)
-          optDict[[r]] = select
+          if (r,) in selectTablesDict: 
+            selectExprs = selectTablesDict[(r,)]
+            selectString = combineSelects(selectExprs)
+            select = Select(table,selectString)
+            optDict[(r,)] = Plan(root=select)
+          else:
+            optDict[(r,)] = Plan(root=table)
       else:
-        combinations = itertools.combinations(relations,n)
-            
+        combinations = itertools.combinations(relations,npass)
+        for c in combinations:
+          clist = sorted(c)
+          bestJoin = None
+          for rel in clist:
+            temp = list(clist)
+            temp.remove(rel)
+            leftOps = optDict[tuple(temp)].root
+            rightOps = optDict[(rel,)].root
+
+            #joinExpr = self.createExpression(temp, list(rel), joinTablesDict)
+            joinExpr = "True"
+            joinBnlj = Plan(root=Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops"))
+            joinBnlj.prepare(self.db)
+            joinBnlj.sample(100)
+            joinNlj = Plan(root=Join(leftOps, rightOps, expr=joinExpr, method="nested-loops"))
+            joinNlj.prepare(self.db)
+            joinNlj.sample(100)
+
+            if joinBnlj.cost(True) < joinNlj.cost(True):
+              if bestJoin == None or joinBnlj.cost(True) < bestJoin.cost(True):
+                bestJoin = joinBnlj
+            else:
+              if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
+                bestJoin = joinNlj
+          optDict[tuple(clist)] = bestJoin
+
+  def createExpression(self, lList, rList, exprDict):
+    lcombos = []
+    lTemp = []
+    rcombos = []
+    rTemp = []
+    for i in range(1, len(lList) + 1):
+      lTemp.extend(itertools.combinations(lList,i))
+    lcombos = [list(elem) for elem in lTemp]
+    for i in range(1, len(rList) + 1):
+      rTemp.extend(list(itertools.combinations(rList,i)))
+    rcombos = [list(elem) for elem in rTemp]
+    plist = list(itertools.product(lList,rList))
+    masterlist = [tuple(sorted(elem[0].extend(elem[1]))) for elem in plist]
+
+    exprString = ""
+    for c in masterlist:
+      if c in exprDict:
+        for s in exprDict[c]:
+          exprString += s + " and "
+    
+    if(exprString == ""):
+      return "True"
+    exprString = exprString[:len(exprString) - 5]
+    return exprString
 
   def combineSelects(self,selectExprs):
     ##TODO: we could sort selects to order based on Selectivity
