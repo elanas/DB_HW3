@@ -29,7 +29,6 @@ class Optimizer:
   >>> query4 = db.query().fromTable('employee').join( \
         db.query().fromTable('department'), \
         method='block-nested-loops', expr='id == eid').finalize()
-
   >>> db.optimizer.pickJoinOrder(query4)
 
   # Pushdown Optimization
@@ -44,7 +43,7 @@ class Optimizer:
         db.query().fromTable('department'), \
         method='block-nested-loops', expr='id == eid')\
         .where('eid > 0 and id > 0 and (eid == 5 or id == 6)').finalize()
-  >>> print(db.optimizer.pushdownOperators(query6).explain())
+  >>> print(db.optimizer.pickJoinOrder(query6).explain())
 
   """
 
@@ -163,7 +162,6 @@ class Optimizer:
 
     while len(q) > 0:
       currNode = q.pop()
-      f.write(currNode.operatorType() + "\n")
       if (currNode.operatorType() == "Select"):
         #all selects were already decomposed in pushdown #TODO this isn't true!
         attrList = ExpressionInfo(currNode.selectExpr).getAttributes()
@@ -177,9 +175,6 @@ class Optimizer:
         if sourceTuple not in selectTablesDict:
           selectTablesDict[sourceTuple] = []
         selectTablesDict[sourceTuple].append(currNode.selectExpr)
-        f = open("hash.txt", "a")
-        f.write("working?")
-        f.close()
  
       elif "Join" in currNode.operatorType():
         joinExprList = ExpressionInfo(currNode.joinExpr).decomposeCNF()
@@ -242,8 +237,7 @@ class Optimizer:
             leftOps = optDict[tuple(temp)].root
             rightOps = optDict[(rel,)].root
 
-            #joinExpr = self.createExpression(temp, list(rel), joinTablesDict)
-            joinExpr = "True"
+            joinExpr = self.createExpression(temp, [rel], joinTablesDict)
             joinBnlj = Plan(root=Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops"))
             joinBnlj.prepare(self.db)
             joinBnlj.sample(100)
@@ -260,6 +254,8 @@ class Optimizer:
           optDict[tuple(clist)] = bestJoin
 
   def createExpression(self, lList, rList, exprDict):
+   
+    
     lcombos = []
     lTemp = []
     rcombos = []
@@ -271,9 +267,19 @@ class Optimizer:
       rTemp.extend(list(itertools.combinations(rList,i)))
     rcombos = [list(elem) for elem in rTemp]
     plist = list(itertools.product(lList,rList))
-    masterlist = [tuple(sorted(elem[0].extend(elem[1]))) for elem in plist]
+   
+    #masterlist = [tuple(sorted(elem[0].extend(elem[1]))) for elem in plist]
+    masterlist = plist
 
     exprString = ""
+    
+    f = open("dict.txt", "a")
+    f.write(str(exprDict))
+    f.write("----")
+    f.write(str(masterlist))
+    f.write("\n")
+    f.close()
+    
     for c in masterlist:
       if c in exprDict:
         for s in exprDict[c]:
@@ -282,6 +288,7 @@ class Optimizer:
     if(exprString == ""):
       return "True"
     exprString = exprString[:len(exprString) - 5]
+    
     return exprString
 
   def combineSelects(self,selectExprs):
