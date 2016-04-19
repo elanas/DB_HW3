@@ -29,6 +29,7 @@ class Optimizer:
   >>> query4 = db.query().fromTable('employee').join( \
         db.query().fromTable('department'), \
         method='block-nested-loops', expr='id == eid').finalize()
+  >>> print(query4.explain())
   >>> db.optimizer.pickJoinOrder(query4)
 
   # Pushdown Optimization
@@ -38,12 +39,13 @@ class Optimizer:
         .where('eid > 0 and id > 0 and (eid == 5 or id == 6)')\
         .select({'id': ('id', 'int'), 'eid':('eid','int')}).finalize()
 
+
   # Pushdown Optimization
-  >>> query6 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
-        db.query().fromTable('department'), \
-        method='block-nested-loops', expr='id == eid')\
-        .where('eid > 0 and id > 0 and (eid == 5 or id == 6)').finalize()
-  >>> print(db.optimizer.pickJoinOrder(query6).explain())
+ # >>> query6 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
+ #       db.query().fromTable('department'), \
+ #       method='block-nested-loops', expr='id == eid')\
+ #       .where('eid > 0 and id > 0 and (eid == 5 or id == 6)').finalize()
+ # >>> print(db.optimizer.pickJoinOrder(query6).explain())
 
   """
 
@@ -255,7 +257,9 @@ class Optimizer:
 
   def createExpression(self, lList, rList, exprDict):
    
-    
+    lfile = open("lfile.txt","w")
+    lfile.write(str(lList) + " " + str(rList))
+    lfile.close()
     lcombos = []
     lTemp = []
     rcombos = []
@@ -266,21 +270,33 @@ class Optimizer:
     for i in range(1, len(rList) + 1):
       rTemp.extend(list(itertools.combinations(rList,i)))
     rcombos = [list(elem) for elem in rTemp]
-    plist = list(itertools.product(lList,rList))
+    plist = list(itertools.product(lcombos,rcombos))
+   
+    f = open("dict.txt", "w")
+    #f.write(str(exprDict))
+    #f.write("----")
+    #f.write(str(lcombos) + " " + str(rcombos))
    
     #masterlist = [tuple(sorted(elem[0].extend(elem[1]))) for elem in plist]
-    masterlist = plist
+    masterlist = []
+
+    for elem in plist:
+      item1 = elem[0]
+      item2 = elem[1]
+      item1.extend(item2)
+      masterlist.append(sorted(item1))
+      
+
+    f.write(str(masterlist))      
+    f.close()
+    
+    #masterlist = plist
 
     exprString = ""
     
-    f = open("dict.txt", "a")
-    f.write(str(exprDict))
-    f.write("----")
-    f.write(str(masterlist))
-    f.write("\n")
-    f.close()
-    
-    for c in masterlist:
+   
+    for listc in masterlist:
+      c = tuple(listc)
       if c in exprDict:
         for s in exprDict[c]:
           exprString += s + " and "
