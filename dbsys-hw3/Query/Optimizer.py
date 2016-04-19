@@ -22,8 +22,24 @@ class Optimizer:
   >>> try:
   ...   db.createRelation('department', [('did', 'int'), ('eid', 'int')])
   ...   db.createRelation('employee', [('id', 'int'), ('age', 'int')])
+  ...   db.createRelation('Iabc', [('a', 'int'), ('b', 'int'), ('c', 'int')])
+  ...   db.createRelation('Idef', [('d', 'int'), ('e', 'int'), ('f', 'int')])
+  ...   db.createRelation('Ighi', [('g', 'int'), ('h', 'int'), ('i', 'int')])
+  ...   db.createRelation('Ijkl', [('j', 'int'), ('k', 'int'), ('l', 'int')])
+  ...   db.createRelation('Imno', [('m', 'int'), ('n', 'int'), ('o', 'int')])
+  ...   db.createRelation('Ipqr', [('p', 'int'), ('q', 'int'), ('r', 'int')])
+  ...   db.createRelation('Istu', [('s', 'int'), ('t', 'int'), ('u', 'int')])
+  ...   db.createRelation('Ivwx', [('v', 'int'), ('w', 'int'), ('x', 'int')])
   ... except ValueError:
   ...   pass
+
+  >>> query = db.query().fromTable('Iabc').join( \
+        db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').join( \
+        db.query().fromTable('Ighi').join( \
+        db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
+        expr='b == i and e == k').finalize()
+  >>> db.optimizer.pickJoinOrder(query)
+  >>> print(query.explain())
 
   # Join Order Optimization
   >>> query4 = db.query().fromTable('employee').join( \
