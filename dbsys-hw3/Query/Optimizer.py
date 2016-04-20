@@ -38,15 +38,16 @@ class Optimizer:
         db.query().fromTable('Ighi').join( \
         db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
         expr='b == i and e == k').finalize()
-  >>> db.optimizer.pickJoinOrder(query)
-  >>> print(query.explain())
+  >>> result = db.optimizer.pickJoinOrder(query)
+  >>> print(result.explain())
+
 
   # Join Order Optimization
   >>> query4 = db.query().fromTable('employee').join( \
         db.query().fromTable('department'), \
         method='block-nested-loops', expr='id == eid').finalize()
-  >>> print(query4.explain())
-  >>> db.optimizer.pickJoinOrder(query4)
+  >>> result = db.optimizer.pickJoinOrder(query4)
+  >>> print(result.explain())
 
   # Pushdown Optimization
   >>> query5 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
@@ -270,6 +271,9 @@ class Optimizer:
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
           optDict[tuple(clist)] = bestJoin
+
+    # after System R algorithm
+    
 
   def createExpression(self, lList, rList, exprDict):
    
