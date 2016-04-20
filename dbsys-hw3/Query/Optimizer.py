@@ -271,9 +271,9 @@ class Optimizer:
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
           optDict[tuple(clist)] = bestJoin
-
+          
     # after System R algorithm
-    
+    return optDict[tuple(sorted(relations))]
 
   def createExpression(self, lList, rList, exprDict):
    
