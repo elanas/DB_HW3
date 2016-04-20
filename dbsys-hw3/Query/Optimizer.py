@@ -33,12 +33,20 @@ class Optimizer:
   ... except ValueError:
   ...   pass
 
-  >>> query = db.query().fromTable('Iabc').join( \
+   >>> query = db.query().fromTable('Iabc').join( \
         db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').join( \
         db.query().fromTable('Ighi').join( \
         db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
         expr='b == i and e == k').finalize()
   >>> result = db.optimizer.pickJoinOrder(query)
+  >>> print(result.explain())
+
+ >>> querySelect = db.query().fromTable('Iabc').where('a < 20').join( \
+        db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').where('c > f').join( \
+        db.query().fromTable('Ighi').join( \
+        db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
+        expr='b == i and e == k').where('a == h and d == 5').finalize()
+  >>> result = db.optimizer.pickJoinOrder(querySelect)
   >>> print(result.explain())
 
 
@@ -177,24 +185,25 @@ class Optimizer:
     selectTablesDict = {} # mapping of relation list to list of exprs using them: [A,B] -> [a < b, etc]
     joinTablesDict = {} # same thing but for joins, not selects 
 
-    f = open("stop.txt", "a")
 
     while len(q) > 0:
       currNode = q.pop()
+      
       if (currNode.operatorType() == "Select"):
-        #all selects were already decomposed in pushdown #TODO this isn't true!
-        attrList = ExpressionInfo(currNode.selectExpr).getAttributes()
-        sourceList = [] 
-        for attr in attrList: #Could be more than 2! (a<b or c>1)
-          source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
-          if source not in sourceList:
-            sourceList.append(source)
+        selectExprList = ExpressionInfo(currNode.selectExpr).decomposeCNF()
+        for selectExpr in selectExprList:
+          attrList = ExpressionInfo(selectExpr).getAttributes()
+          sourceList = [] 
+          for attr in attrList: #Could be more than 2! (a<b or c>1)
+            source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
+            if source not in sourceList:
+              sourceList.append(source)
 
-        sourceTuple = tuple(sorted(sourceList))
-        if sourceTuple not in selectTablesDict:
-          selectTablesDict[sourceTuple] = []
-        selectTablesDict[sourceTuple].append(currNode.selectExpr)
- 
+          sourceTuple = tuple(sorted(sourceList))
+          if sourceTuple not in selectTablesDict:
+            selectTablesDict[sourceTuple] = []
+          selectTablesDict[sourceTuple].append(selectExpr)
+      
       elif "Join" in currNode.operatorType():
         joinExprList = ExpressionInfo(currNode.joinExpr).decomposeCNF()
         for joinExpr in joinExprList:
@@ -208,15 +217,13 @@ class Optimizer:
           sourceTuple = tuple(sorted(sourceList))
           if sourceTuple not in joinTablesDict:
             joinTablesDict[sourceTuple] = []
-          joinTablesDict[sourceTuple].append(currNode.joinExpr)
+          joinTablesDict[sourceTuple].append(joinExpr)
         
-
       if len(currNode.inputs()) > 1:
         q.append(currNode.lhsPlan)
         q.append(currNode.rhsPlan)
       elif len(currNode.inputs()) == 1:
         q.append(currNode.subPlan)
-
 
     return (joinTablesDict, selectTablesDict)
 
@@ -240,7 +247,7 @@ class Optimizer:
           table = TableScan(r,self.db.relationSchema(r))
           if (r,) in selectTablesDict: 
             selectExprs = selectTablesDict[(r,)]
-            selectString = combineSelects(selectExprs)
+            selectString = self.combineSelects(selectExprs)
             select = Select(table,selectString)
             optDict[(r,)] = Plan(root=select)
           else:
@@ -256,11 +263,28 @@ class Optimizer:
             leftOps = optDict[tuple(temp)].root
             rightOps = optDict[(rel,)].root
 
+            selectExpr = self.createExpression(temp, [rel], selectTablesDict)
             joinExpr = self.createExpression(temp, [rel], joinTablesDict)
-            joinBnlj = Plan(root=Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops"))
+            
+            joinBnljOp = Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops" )
+            fullBnljOp = Select(joinBnljOp, selectExpr)
+
+            if selectExpr == "True":
+              joinBnlj = Plan(root=joinBnljOp)
+            else:
+              joinBnlj = Plan(root=fullBnljOp)
+            
             joinBnlj.prepare(self.db)
             joinBnlj.sample(100)
-            joinNlj = Plan(root=Join(leftOps, rightOps, expr=joinExpr, method="nested-loops"))
+            
+            joinNljOp = Join(leftOps, rightOps, expr=joinExpr, method="nested-loops" )
+            fullNljOp = Select(joinNljOp, selectExpr)
+
+            if selectExpr == "True":
+              joinNlj = Plan(root=joinNljOp)
+            else:
+              joinNlj = Plan(root=fullNljOp)
+            
             joinNlj.prepare(self.db)
             joinNlj.sample(100)
 
@@ -277,9 +301,6 @@ class Optimizer:
 
   def createExpression(self, lList, rList, exprDict):
    
-    lfile = open("lfile.txt","w")
-    lfile.write(str(lList) + " " + str(rList))
-    lfile.close()
     lcombos = []
     lTemp = []
     rcombos = []
@@ -292,12 +313,6 @@ class Optimizer:
     rcombos = [list(elem) for elem in rTemp]
     plist = list(itertools.product(lcombos,rcombos))
    
-    f = open("dict.txt", "w")
-    #f.write(str(exprDict))
-    #f.write("----")
-    #f.write(str(lcombos) + " " + str(rcombos))
-   
-    #masterlist = [tuple(sorted(elem[0].extend(elem[1]))) for elem in plist]
     masterlist = []
 
     for elem in plist:
@@ -306,14 +321,7 @@ class Optimizer:
       item1.extend(item2)
       masterlist.append(sorted(item1))
       
-
-    f.write(str(masterlist))      
-    f.close()
-    
-    #masterlist = plist
-
     exprString = ""
-    
    
     for listc in masterlist:
       c = tuple(listc)
