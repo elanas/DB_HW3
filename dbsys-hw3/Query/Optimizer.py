@@ -260,7 +260,7 @@ class Optimizer:
     # and on top of it the select exprs that involve 2 tables A,C or B,C
 
     isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
-    
+    outputSchema = plan.schema() 
     optDict = {}
 
     for npass in range(1, len(relations) + 1):
@@ -319,16 +319,25 @@ class Optimizer:
           optDict[tuple(clist)] = bestJoin
           
     # after System R algorithm
+    newPlan = optDict[tuple(sorted(relations))]
 
     if isGroupBy:
       groupBy = plan.root
-      joinPlan = optDict[tuple(sorted(relations))]
+      joinPlan = newPlan
       groupBy.subplan = joinPlan.root
       newPlan = Plan(root=groupBy)
-      optDict[tuple(sorted(relations))] = newPlan
 
+    if set(outputSchema.schema()) != set(newPlan.schema().schema()):
+      projectDict = {}
 
-    return optDict[tuple(sorted(relations))]
+      for f, t in outputSchema.schema():
+        projectDict[f] = (f, t) 
+      
+      currRoot = newPlan.root
+      project = Project(currRoot, projectDict)
+      newPlan = Plan(root=project)
+  
+    return newPlan
 
   def createExpression(self, lList, rList, exprDict):
    
