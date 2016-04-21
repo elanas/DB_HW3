@@ -19,6 +19,8 @@ class Optimizer:
 
   >>> import Database
   >>> db = Database.Database()
+  >>> import sys
+  >>> from Catalog.Schema import DBSchema
   >>> try:
   ...   db.createRelation('department', [('did', 'int'), ('eid', 'int')])
   ...   db.createRelation('employee', [('id', 'int'), ('age', 'int')])
@@ -41,7 +43,25 @@ class Optimizer:
   >>> result = db.optimizer.pickJoinOrder(query)
   >>> print(result.explain())
 
- >>> querySelect = db.query().fromTable('Iabc').where('a < 20').join( \
+
+  >>> aggMinMaxSchema = DBSchema('minmax', [('minAge', 'int'), ('maxAge','int')])
+  >>> keySchema  = DBSchema('aKey',  [('a', 'int')])
+  >>> queryGroup = db.query().fromTable('Iabc').where('a < 20').join( \
+        db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').where('c > f').join( \
+        db.query().fromTable('Ighi').join( \
+        db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
+        expr='b == i and e == k').where('a == h and d == 5').groupBy( \
+        groupSchema=DBSchema('aKey', [('a', 'int')]), \
+        aggSchema=aggMinMaxSchema, \
+        groupExpr=(lambda e: e.a % 2), \
+        aggExprs=[(sys.maxsize, lambda acc, e: min(acc, e.b), lambda x: x), \
+        (0, lambda acc, e: max(acc, e.b), lambda x: x)], \
+        groupHashFn=(lambda gbVal: hash(gbVal[0]) % 2) \
+        ).finalize()
+  >>> result = db.optimizer.pickJoinOrder(queryGroup)
+  >>> print(result.explain())
+
+>>> querySelect = db.query().fromTable('Iabc').where('a < 20').join( \
         db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').where('c > f').join( \
         db.query().fromTable('Ighi').join( \
         db.query().fromTable('Ijkl'), method='block-nested-loops', expr='h ==  j'), method='block-nested-loops', \
@@ -239,6 +259,8 @@ class Optimizer:
     # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
     # and on top of it the select exprs that involve 2 tables A,C or B,C
 
+    isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
+    
     optDict = {}
 
     for npass in range(1, len(relations) + 1):
@@ -297,6 +319,15 @@ class Optimizer:
           optDict[tuple(clist)] = bestJoin
           
     # after System R algorithm
+
+    if isGroupBy:
+      groupBy = plan.root
+      joinPlan = optDict[tuple(sorted(relations))]
+      groupBy.subplan = joinPlan.root
+      newPlan = Plan(root=groupBy)
+      optDict[tuple(sorted(relations))] = newPlan
+
+
     return optDict[tuple(sorted(relations))]
 
   def createExpression(self, lList, rList, exprDict):
@@ -361,3 +392,79 @@ class Optimizer:
 if __name__ == "__main__":
   import doctest
   doctest.testmod()
+
+
+
+class BushyOptimizer(Optimizer):
+  
+  def pickJoinOrder(self, plan):
+    relations = plan.relations()
+    fieldDict = self.obtainFieldDict(plan)
+    (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
+    # makes dicts that maps a list of relations to exprs involving that list
+    # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
+    # and on top of it the select exprs that involve 2 tables A,C or B,C
+
+    
+
+    optDict = {}
+
+    for npass in range(1, len(relations) + 1):
+      if npass == 1:
+        for r in relations:
+          table = TableScan(r,self.db.relationSchema(r))
+          if (r,) in selectTablesDict: 
+            selectExprs = selectTablesDict[(r,)]
+            selectString = self.combineSelects(selectExprs)
+            select = Select(table,selectString)
+            optDict[(r,)] = Plan(root=select)
+          else:
+            optDict[(r,)] = Plan(root=table)
+      else:
+        combinations = itertools.combinations(relations,npass)
+        for c in combinations:
+          clist = sorted(c)
+          bestJoin = None
+          for rel in clist:
+            temp = list(clist)
+            temp.remove(rel)
+            leftOps = optDict[tuple(temp)].root
+            rightOps = optDict[(rel,)].root
+
+            selectExpr = self.createExpression(temp, [rel], selectTablesDict)
+            joinExpr = self.createExpression(temp, [rel], joinTablesDict)
+            
+            joinBnljOp = Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops" )
+            fullBnljOp = Select(joinBnljOp, selectExpr)
+
+            if selectExpr == "True":
+              joinBnlj = Plan(root=joinBnljOp)
+            else:
+              joinBnlj = Plan(root=fullBnljOp)
+            
+            joinBnlj.prepare(self.db)
+            joinBnlj.sample(100)
+            
+            joinNljOp = Join(leftOps, rightOps, expr=joinExpr, method="nested-loops" )
+            fullNljOp = Select(joinNljOp, selectExpr)
+
+            if selectExpr == "True":
+              joinNlj = Plan(root=joinNljOp)
+            else:
+              joinNlj = Plan(root=fullNljOp)
+            
+            joinNlj.prepare(self.db)
+            joinNlj.sample(100)
+
+            if joinBnlj.cost(True) < joinNlj.cost(True):
+              if bestJoin == None or joinBnlj.cost(True) < bestJoin.cost(True):
+                bestJoin = joinBnlj
+            else:
+              if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
+                bestJoin = joinNlj
+          optDict[tuple(clist)] = bestJoin
+    
+    # after System R algorithm
+    return optDict[tuple(sorted(relations))]
+
+ 
