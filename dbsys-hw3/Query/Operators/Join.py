@@ -37,9 +37,17 @@ class Join(Operator):
     numPagesRight = (tupleSizeRight * numTuplesRight) // pageSize
 
     if self.joinMethod == "nested-loops":
-      return (numTuplesLeft * numPagesRight) + numPagesLeft
+      return numTuplesLeft * numTuplesRight * self.tupleCost
+      #return (numTuplesLeft * numPagesRight) + numPagesLeft
     elif self.joinMethod == "block-nested-loops":
-      return numPagesLeft + ((numPagesLeft // (self.storage.bufferPool.numPages() - 2)) * numPagesRight)
+      # We spoke to Yanif, he explained tupleCost to represent 
+      # some numerical constant such that multiplying it by num tuples
+      # allows for appropriate measures of various costs.
+      # Thus, it amortizes disc I/O. 
+      # For this reason, NLJ/BNLJ have the same equation to find cost,
+      # but an accurate application would have different tuple cost values for each.
+      return numTuplesLeft * numTuplesRight * self.tupleCost
+      #return numPagesLeft + ((numPagesLeft // (self.storage.bufferPool.numPages() - 2)) * numPagesRight)
     elif self.joinMethod == "indexed":
       raise NotImplementedError
     elif self.joinMethod == "hash":
