@@ -97,7 +97,6 @@ class Optimizer:
 
   def __init__(self, db):
     self.db = db
-    self.statsCache = {}
 
   # Caches the cost of a plan computed during query optimization.
   def addPlanCost(self, plan, cost):
@@ -409,9 +408,16 @@ if __name__ == "__main__":
 
 
 class BushyOptimizer(Optimizer):
-  
+ 
+  def __init__(self, db):
+    super().__init__(db)
+
   def pickJoinOrder(self, plan):
     
+    f = open("bushy.txt", "w")
+    f.write("running bushy")
+    f.close()
+
     relations = plan.relations()
     fieldDict = self.obtainFieldDict(plan)
     (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
@@ -437,16 +443,22 @@ class BushyOptimizer(Optimizer):
       else:
         combinations = itertools.combinations(relations,npass)
         for c in combinations:
-          clist = sorted(c)
+          fullList = sorted(c)
+          clist = self.getCombos(fullList)
           bestJoin = None
-          for rel in clist:
-            temp = list(clist)
-            temp.remove(rel)
-            leftOps = optDict[tuple(temp)].root
-            rightOps = optDict[(rel,)].root
+          for subcombo in clist:
+            complement = self.getComplement(fullList, subcombo)
+            
+            leftOps = optDict[tuple(complement)].root
+            rightOps = optDict[tuple(subcombo)].root
 
-            selectExpr = self.createExpression(temp, [rel], selectTablesDict)
-            joinExpr = self.createExpression(temp, [rel], joinTablesDict)
+            f = open("sub.txt", "a")
+            f.write(str(subcombo) + " --- " + str(complement))
+            f.write("\n")
+            f.close()
+
+            selectExpr = self.createExpression(complement, subcombo, selectTablesDict)
+            joinExpr = self.createExpression(complement, subcombo, joinTablesDict)
             
             joinBnljOp = Join(leftOps, rightOps, expr=joinExpr, method="block-nested-loops" )
             fullBnljOp = Select(joinBnljOp, selectExpr)
@@ -476,7 +488,7 @@ class BushyOptimizer(Optimizer):
             else:
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
-          optDict[tuple(clist)] = bestJoin
+          optDict[tuple(fullList)] = bestJoin
           
     # after System R algorithm
     newPlan = optDict[tuple(sorted(relations))]
@@ -502,15 +514,25 @@ class BushyOptimizer(Optimizer):
   
     return newPlan
    
-
+  def getComplement(self,fullList,xList):
+    f = open("list.txt", "a")
+    f.write(str(fullList) + " --- " + str(xList) + "\n")
+    f.close()
+    
+    newList = fullList[:]
+    
+    for x in xList:
+      newList.remove(x)
+    return newList
+  
   def getCombos(self, cList):
     combos = []
     temp = []
-    for i in range(1, len(cList) + 1):
+    for i in range(1, len(cList)):
       temp.extend(itertools.combinations(cList,i))
-    combos = [list(elem) for elem in temp]
+    combos = [sorted(list(elem)) for elem in temp]
 
-    f = open("combos.txt", "w")
-    f.write(str(combos))
+    f = open("combos.txt", "a")
+    f.write(str(combos) + "\n")
     f.close()
     return combos
