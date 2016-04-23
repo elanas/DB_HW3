@@ -36,6 +36,16 @@ class Optimizer:
   ... except ValueError:
   ...   pass
 
+  >>> depSchema = self.db.relationSchema('department')
+  >>> empSchema = self.db.relationSchema('employee')
+  >>> iabcSchema = self.db.relationSchema('Iabc')
+  >>> idefSchema = self.db.relationSchema('Idef')
+  >>> ighiSchema = self.db.relationSchema('Ighi')
+  >>> ijklSchema = self.db.relationSchema('Ijkl')
+  
+  >>> for tup in [empSchema.pack(empSchema.instantiate(i, 2*i+20, i % 2)) for i in range(self.numEmployees)]:
+         self.db.insertTuple(empSchema.name, tup)
+
    >>> query = db.query().fromTable('Iabc').join( \
         db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').join( \
         db.query().fromTable('Ighi').join( \
