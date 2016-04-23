@@ -5,6 +5,7 @@ from Query.Operators.Join import Join
 from Query.Operators.TableScan import TableScan 
 from Query.Operators.Project import Project
 from Query.Operators.Select import Select
+from Query.Operators.GroupBy import GroupBy
 from Utils.ExpressionInfo import ExpressionInfo
 
 class Optimizer:
@@ -322,10 +323,12 @@ class Optimizer:
     newPlan = optDict[tuple(sorted(relations))]
 
     if isGroupBy:
-      groupBy = plan.root
-      joinPlan = newPlan
-      groupBy.subplan = joinPlan.root
-      newPlan = Plan(root=groupBy)
+      newGroupBy = GroupBy(newPlan.root, groupSchema=plan.root.groupSchema, \
+        aggSchema=plan.root.aggSchema, groupExpr=plan.root.groupExpr, \
+        aggExprs=plan.root.aggExprs, \
+        groupHashFn=plan.root.groupHashFn)
+      newGroupBy.prepare(self.db)
+      newPlan = Plan(root=newGroupBy)
 
     if set(outputSchema.schema()) != set(newPlan.schema().schema()):
       projectDict = {}
@@ -335,6 +338,7 @@ class Optimizer:
       
       currRoot = newPlan.root
       project = Project(currRoot, projectDict)
+      project.prepare(self.db)
       newPlan = Plan(root=project)
   
     return newPlan
@@ -407,6 +411,7 @@ if __name__ == "__main__":
 class BushyOptimizer(Optimizer):
   
   def pickJoinOrder(self, plan):
+    
     relations = plan.relations()
     fieldDict = self.obtainFieldDict(plan)
     (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
@@ -414,8 +419,8 @@ class BushyOptimizer(Optimizer):
     # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
     # and on top of it the select exprs that involve 2 tables A,C or B,C
 
-    
-
+    isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
+    outputSchema = plan.schema() 
     optDict = {}
 
     for npass in range(1, len(relations) + 1):
@@ -472,8 +477,40 @@ class BushyOptimizer(Optimizer):
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
           optDict[tuple(clist)] = bestJoin
-    
+          
     # after System R algorithm
-    return optDict[tuple(sorted(relations))]
+    newPlan = optDict[tuple(sorted(relations))]
 
- 
+    if isGroupBy:
+      newGroupBy = GroupBy(newPlan.root, groupSchema=plan.root.groupSchema, \
+        aggSchema=plan.root.aggSchema, groupExpr=plan.root.groupExpr, \
+        aggExprs=plan.root.aggExprs, \
+        groupHashFn=plan.root.groupHashFn)
+      newGroupBy.prepare(self.db)
+      newPlan = Plan(root=newGroupBy)
+
+    if set(outputSchema.schema()) != set(newPlan.schema().schema()):
+      projectDict = {}
+
+      for f, t in outputSchema.schema():
+        projectDict[f] = (f, t) 
+      
+      currRoot = newPlan.root
+      project = Project(currRoot, projectDict)
+      project.prepare(self.db)
+      newPlan = Plan(root=project)
+  
+    return newPlan
+   
+
+  def getCombos(self, cList):
+    combos = []
+    temp = []
+    for i in range(1, len(cList) + 1):
+      temp.extend(itertools.combinations(cList,i))
+    combos = [list(elem) for elem in temp]
+
+    f = open("combos.txt", "w")
+    f.write(str(combos))
+    f.close()
+    return combos
