@@ -414,10 +414,6 @@ class BushyOptimizer(Optimizer):
 
   def pickJoinOrder(self, plan):
     
-    f = open("bushy.txt", "w")
-    f.write("running bushy")
-    f.close()
-
     relations = plan.relations()
     fieldDict = self.obtainFieldDict(plan)
     (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
@@ -451,11 +447,6 @@ class BushyOptimizer(Optimizer):
             
             leftOps = optDict[tuple(complement)].root
             rightOps = optDict[tuple(subcombo)].root
-
-            f = open("sub.txt", "a")
-            f.write(str(subcombo) + " --- " + str(complement))
-            f.write("\n")
-            f.close()
 
             selectExpr = self.createExpression(complement, subcombo, selectTablesDict)
             joinExpr = self.createExpression(complement, subcombo, joinTablesDict)
@@ -515,10 +506,6 @@ class BushyOptimizer(Optimizer):
     return newPlan
    
   def getComplement(self,fullList,xList):
-    f = open("list.txt", "a")
-    f.write(str(fullList) + " --- " + str(xList) + "\n")
-    f.close()
-    
     newList = fullList[:]
     
     for x in xList:
@@ -532,7 +519,4 @@ class BushyOptimizer(Optimizer):
       temp.extend(itertools.combinations(cList,i))
     combos = [sorted(list(elem)) for elem in temp]
 
-    f = open("combos.txt", "a")
-    f.write(str(combos) + "\n")
-    f.close()
     return combos
