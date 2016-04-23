@@ -520,3 +520,107 @@ class BushyOptimizer(Optimizer):
     combos = [sorted(list(elem)) for elem in temp]
 
     return combos
+
+class GreedyOptimizer(Optimizer):
+
+  def __init__(self, db):
+    super().__init__(db)
+
+  def pickJoinOrder(self, plan):
+    relations = plan.relations()
+    fieldDict = self.obtainFieldDict(plan)
+    (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
+    # makes dicts that maps a list of relations to exprs involving that list
+    # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C
+    # and on top of it the select exprs that involve 2 tables A,C or B,C
+
+    isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
+    outputSchema = plan.schema() 
+
+    worklist = []
+    for r in relations:
+      table = TableScan(r,self.db.relationSchema(r))
+      table.prepare(self.db)
+      if (r,) in selectTablesDict: 
+        selectExprs = selectTablesDict[(r,)]
+        selectString = self.combineSelects(selectExprs)
+        select = Select(table,selectString)
+        select.prepare(self.db)
+        worklist.append(Plan(root=select))
+      else:
+        worklist.append(Plan(root=table))
+
+    while(len(worklist) > 1):
+      combos = itertools.combinations(worklist,2)
+      bestJoin = None
+      sourcePair = None
+
+      for pair in combos:
+        op1 = pair[0].root
+        op2 = pair[1].root
+
+        selectExpr = self.createExpression(pair[0].relations(), pair[1].relations(), selectTablesDict)
+        joinExpr = self.createExpression(pair[0].relations(), pair[1].relations(), joinTablesDict)
+        
+        join1BnljOp = Join(op1, op2, expr=joinExpr, method="block-nested-loops" )
+        join2BnljOp = Join(op2, op1, expr=joinExpr, method="block-nested-loops" )
+
+
+        join1NljOp = Join(op1, op2, expr=joinExpr, method="nested-loops" )
+        join2NljOp = Join(op2, op1, expr=joinExpr, method="nested-loops" )
+
+        if selectExpr == "True":
+          full1BnljOp = join1BnljOp
+          full2BnljOp = join2BnljOp
+          
+          full1NljOp = join1NljOp
+          full2NljOp = join2NljOp
+
+        else:
+          full1BnljOp = Select(join1BnljOp, selectExpr)
+          full2BnljOp = Select(join2BnljOp, selectExpr)
+          
+          full1NljOp = Select(join1NljOp, selectExpr)
+          full2NljOp = Select(join2NljOp, selectExpr)
+        
+
+        joinList = [full1BnljOp, full2BnljOp, full1NljOp, full2NljOp]
+
+        for j in joinList:
+          joinplan = Plan(root=j)
+          joinplan.prepare(self.db)
+          joinplan.sample(100)
+
+          if bestJoin == None or joinplan.cost(True) < bestJoin.cost(True):
+            bestJoin = joinplan
+            sourcePair = pair
+
+      worklist.remove(sourcePair[0])
+      worklist.remove(sourcePair[1])
+      worklist.append(bestJoin)
+
+    # after System R algorithm
+    newPlan = worklist[0]
+
+    if isGroupBy:
+      newGroupBy = GroupBy(newPlan.root, groupSchema=plan.root.groupSchema, \
+        aggSchema=plan.root.aggSchema, groupExpr=plan.root.groupExpr, \
+        aggExprs=plan.root.aggExprs, \
+        groupHashFn=plan.root.groupHashFn)
+      newGroupBy.prepare(self.db)
+      newPlan = Plan(root=newGroupBy)
+
+    if set(outputSchema.schema()) != set(newPlan.schema().schema()):
+      projectDict = {}
+
+      for f, t in outputSchema.schema():
+        projectDict[f] = (f, t) 
+      
+      currRoot = newPlan.root
+      project = Project(currRoot, projectDict)
+      project.prepare(self.db)
+      newPlan = Plan(root=project)
+  
+    return newPlan
+
+
