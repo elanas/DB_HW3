@@ -1,4 +1,5 @@
 import itertools
+import time
 
 from Query.Plan import Plan
 from Query.Operators.Join import Join
@@ -406,10 +407,24 @@ class Optimizer:
   # Optimize the given query plan, returning the resulting improved plan.
   # This should perform operation pushdown, followed by join order selection.
   def optimizeQuery(self, plan):
-    pushedDown_plan = self.pushdownOperators(plan)
-    joinPicked_plan = self.pickJoinOrder(pushedDown_plan)
+    #pushedDown_plan = self.pushdownOperators(plan)
+    start = time.time()
+    joinPicked_plan = self.pickJoinOrder(plan)
+    end = time.time()
+
+    bushyOutput = open("bushy12Tests.txt", "a")
+    #bushyOutput.write("join size\tplan count\telapsed seconds\n")
+    bushyOutput.write(str(len(joinPicked_plan.relations())) + ", " + str(self.reportPlanCount) + ", " + str(end-start) + "\n")
+    bushyOutput.close()
 
     return joinPicked_plan
+
+
+  def clearSampleFiles(self):
+    temp_rels = filter(lambda rel: rel not in self.db.relations(), self.db.storage.relations())
+    for rel in list(temp_rels):
+      self.db.storage.removeRelation(rel) 
+
 
 if __name__ == "__main__":
   import doctest
@@ -434,6 +449,7 @@ class BushyOptimizer(Optimizer):
     isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
     outputSchema = plan.schema() 
     optDict = {}
+    self.reportPlanCount = 0
 
     for npass in range(1, len(relations) + 1):
       if npass == 1:
@@ -446,6 +462,7 @@ class BushyOptimizer(Optimizer):
             optDict[(r,)] = Plan(root=select)
           else:
             optDict[(r,)] = Plan(root=table)
+          self.reportPlanCount += 1
       else:
         combinations = itertools.combinations(relations,npass)
         for c in combinations:
@@ -489,6 +506,10 @@ class BushyOptimizer(Optimizer):
             else:
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
+
+            self.reportPlanCount += 2
+            self.clearSampleFiles()
+
           optDict[tuple(fullList)] = bestJoin
           
     # after System R algorithm
@@ -604,6 +625,8 @@ class GreedyOptimizer(Optimizer):
           if bestJoin == None or joinplan.cost(True) < bestJoin.cost(True):
             bestJoin = joinplan
             sourcePair = pair
+
+        self.reportPlanCount += 4
 
       worklist.remove(sourcePair[0])
       worklist.remove(sourcePair[1])

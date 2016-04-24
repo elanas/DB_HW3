@@ -33,9 +33,9 @@ for s in schemaList:
   for tup in [s.pack(s.instantiate(i, 2*i+20, i % 2)) for i in range(10)]:
     db.insertTuple(s.name, tup)
 
-#for s in schemaList1:
-#  for tup in [s.pack(s.instantiate(i, 2*i+20, i % 2)) for i in range(11,30)]:
-#    db.insertTuple(s.name, tup)
+for s in schemaList1:
+  for tup in [s.pack(s.instantiate(i, 2*i+20, i % 2)) for i in range(11,30)]:
+    db.insertTuple(s.name, tup)
 
 query = db.query().fromTable('Iabc').join( \
   db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').join( \
@@ -74,16 +74,16 @@ print(result.explain())
 print("\n\n\n")
 
 
-  # Join Order Optimization
-query4 = db.query().fromTable('employee').join( \
-  db.query().fromTable('department'), \
-  method='block-nested-loops', expr='id == eid').finalize()
-result = db.optimizer.pickJoinOrder(query4)
-print(result.explain())
+#  # Join Order Optimization
+#query4 = db.query().fromTable('employee').join( \
+#  db.query().fromTable('department'), \
+#  method='block-nested-loops', expr='id == eid').finalize()
+#result = db.optimizer.pickJoinOrder(query4)
+#print(result.explain())
 
-# Pusshdown Optimization
-query5 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
-  db.query().fromTable('department'), \
-  method='block-nested-loops', expr='id == eid')\
-  .where('eid > 0 and id > 0 and (eid == 5 or id == 6)')\
-  .select({'id': ('id', 'int'), 'eid':('eid','int')}).finalize()
+## Pusshdown Optimization
+#query5 = db.query().fromTable('employee').union(db.query().fromTable('employee')).join( \
+#  db.query().fromTable('department'), \
+#  method='block-nested-loops', expr='id == eid')\
+#  .where('eid > 0 and id > 0 and (eid == 5 or id == 6)')\
+#  .select({'id': ('id', 'int'), 'eid':('eid','int')}).finalize()
