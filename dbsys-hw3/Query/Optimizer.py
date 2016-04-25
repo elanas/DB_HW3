@@ -327,6 +327,9 @@ class Optimizer:
             else:
               if bestJoin == None or joinNlj.cost(True) < bestJoin.cost(True):
                 bestJoin = joinNlj
+    
+            self.clearSampleFiles()
+
           optDict[tuple(clist)] = bestJoin
           
     # after System R algorithm
@@ -408,14 +411,14 @@ class Optimizer:
   # This should perform operation pushdown, followed by join order selection.
   def optimizeQuery(self, plan):
     #pushedDown_plan = self.pushdownOperators(plan)
-    start = time.time()
+    #start = time.time()
     joinPicked_plan = self.pickJoinOrder(plan)
-    end = time.time()
+    #end = time.time()
 
-    bushyOutput = open("bushy12Tests.txt", "a")
+    #bushyOutput = open("bushy12Tests.txt", "a")
     #bushyOutput.write("join size\tplan count\telapsed seconds\n")
-    bushyOutput.write(str(len(joinPicked_plan.relations())) + ", " + str(self.reportPlanCount) + ", " + str(end-start) + "\n")
-    bushyOutput.close()
+    #bushyOutput.write(str(len(joinPicked_plan.relations())) + ", " + str(self.reportPlanCount) + ", " + str(end-start) + "\n")
+    #bushyOutput.close()
 
     return joinPicked_plan
 
@@ -567,6 +570,7 @@ class GreedyOptimizer(Optimizer):
 
     isGroupBy = True if plan.root.operatorType() == "GroupBy" else False
     outputSchema = plan.schema() 
+    self.reportPlanCount = 0
 
     worklist = []
     for r in relations:
@@ -627,6 +631,9 @@ class GreedyOptimizer(Optimizer):
             sourcePair = pair
 
         self.reportPlanCount += 4
+        self.clearSampleFiles()
+
+
 
       worklist.remove(sourcePair[0])
       worklist.remove(sourcePair[1])
