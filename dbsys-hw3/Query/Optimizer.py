@@ -444,7 +444,8 @@ class BushyOptimizer(Optimizer):
     
     relations = plan.relations()
     fieldDict = self.obtainFieldDict(plan)
-    print(str(fieldDict))
+    
+
     (joinTablesDict, selectTablesDict) = self.getExprDicts(plan, fieldDict)
     # makes dicts that maps a list of relations to exprs involving that list
     # then in system R we will build opt(A,B) Join C using join exprs involving A,C and B,C

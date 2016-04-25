@@ -10,23 +10,21 @@ from Query.Optimizer import GreedyOptimizer
 
 lineitemSchema = db.relationSchema('lineitem')
 
-query1 = db.query().fromTable('lineitem').finalize()
-#query1 = db.query().fromTable('lineitem').where('l_shipdate >= 19940101 and l_shipdate < 19950101 and l_discount > 0.05 and l_discount <  0.07 and l_quantity < 24').finalize()
-
+query1 = db.query().fromTable('lineitem').where('L_SHIPDATE >= 19940101 and L_SHIPDATE < 19950101 and L_DISCOUNT > 0.05 and L_DISCOUNT <  0.07 and L_QUANTITY < 24').finalize()
 
 start = time.time()
 db.processQuery(query1)
 end = time.time()
 
 f = open("1query.txt", "w")
-f.write(str(start - end) + " , ")
+f.write(str(end - start) + " , ")
 
 optQuery = db.optimizer.optimizeQuery(query1)
 start = time.time()
 db.processQuery(optQuery)
 end = time.time()
 
-f.write(str(start - end))
+f.write(str(end - start))
 
 f.close()
 
