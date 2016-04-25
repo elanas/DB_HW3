@@ -44,6 +44,21 @@ query3 = db.query().fromTable('orders').join(db.query().fromTable('customer'), m
 ).finalize() 
 
 
+query4 = db.query().fromTable('nation').join(db.query().fromTable('customer'), method='block-nested-loops', \
+  expr='C_NATIONKEY = N_NATIONKEY').join(db.query().fromTable('orders'), method='block-nested-loops', \
+  expr='C_CUSTKEY=O_CUSTKEY').join(db.query().fromTable('lineitem'), method='block-nested-loops', \
+  expr='L_ORDERKEY=O_ORDERKEY').where("O_ORDERDATE >= 19931001 and O_ORDERDATE < 19940101 and L_RETURNFLAG == 'R'" \
+).groupBy( \
+  groupSchema=DBSchema('group', [('C_CUSTKEY', 'int'), ('C_NAME', 'text'), ('C_ACCTBAL', 'double'), ('C_PHONE', 'text'), \
+  ('N_NAME', 'text'), ('C_ADDRESS', 'text'), ('C_COMMENT', 'text')]), \
+  aggSchema=DBSchema('sum', [('revenue', 'double')]), \
+  groupExpr=(lambda e: (e.C_CUSTKEY, e.C_NAME, e.C_ACCTBAL, e.C_PHONE, e.N_NAME, e.C_ADDRESS, e.C_COMMENT)), \
+  aggExprs=[(0, lambda acc, e: acc + (e.L_EXTENDEDPRICE * (1 - e.L_DISCOUNT)), lambda x: x)], \
+  groupHashFn=(lambda e: e[0] % 10) \
+).finalize() 
+
+
+
 #print(query1.schema().toString())
 
 testquery = query3
