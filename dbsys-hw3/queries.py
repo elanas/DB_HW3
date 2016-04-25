@@ -9,27 +9,68 @@ from Query.Optimizer import GreedyOptimizer
 
 
 lineitemSchema = db.relationSchema('lineitem')
+partSchema = db.relationSchema('part')
 
-query1 = db.query().fromTable('lineitem').where('L_SHIPDATE >= 19940101 and L_SHIPDATE < 19950101 and L_DISCOUNT > 0.05 and L_DISCOUNT <  0.07 and L_QUANTITY < 24').finalize()
+# need to specify a group schema, so need this dummy column
+query1 = db.query().fromTable('lineitem').where( \
+'L_SHIPDATE >= 19940101 and L_SHIPDATE < 19950101 and L_DISCOUNT > 0.05 and L_DISCOUNT <  0.07 and L_QUANTITY < 24').groupBy( \
+  groupSchema=DBSchema('dummy', [('a', 'int')]), \
+  aggSchema=DBSchema('rev', [('revenue', 'double')]), \
+  groupExpr=(lambda e: 1), \
+  aggExprs=[(0, lambda acc, e: acc + (e.L_EXTENDEDPRICE * e.L_DISCOUNT), lambda x: x)], \
+  groupHashFn=(lambda e: 1) \
+).finalize()
+
+query2 = db.query().fromTable('lineitem').join(db.query().fromTable('part'), method='block-nested-loops', expr='L_PARTKEY == P_PARTKEY' \
+).where('L_SHIPDATE >= 19950901 and L_SHIPDATE < 19951001' \
+).groupBy(
+  groupSchema=DBSchema('dummy', [('a', 'int')]), \
+  aggSchema=DBSchema('rev', [('promo_revenue', 'double')]), \
+  groupExpr=(lambda e: 1), \
+  aggExprs=[(0, lambda acc, e: acc + (e.L_EXTENDEDPRICE * (1 - e.L_DISCOUNT)), lambda x: x)], \
+  groupHashFn=(lambda e: 1) \
+).finalize()
+
+
+query3 = db.query().fromTable('orders').join(db.query().fromTable('customer'), method='block-nested-loops', \
+  expr='C_CUSTKEY == O_CUSTKEY').join(db.query().fromTable('lineitem'), method='block-nested-loops', \
+  expr='L_ORDERKEY == O_ORDERKEY').where("C_MKTSEGMENT == 'BUILDING' and O_ORDERDATE < 19950315 and L_SHIPDATE > 19950315" \
+).groupBy( \
+  groupSchema=DBSchema('group', [('L_ORDERKEY', 'int'), ('O_ORDERDATE', 'int'), ('O_SHIPPRIORITY', 'int')]), \
+  aggSchema=DBSchema('sum', [('revenue', 'double')]), \
+  groupExpr=(lambda e: (e.L_ORDERKEY, e.O_ORDERDATE, e.O_SHIPPRIORITY)), \
+  aggExprs=[(0, lambda acc, e: acc + (e.L_EXTENDEDPRICE * (1 - e.L_DISCOUNT)), lambda x: x)], \
+  groupHashFn=(lambda e: e[0] % 10) \
+).finalize() 
+
+
+#print(query1.schema().toString())
+
+testquery = query3
+
 
 start = time.time()
-db.processQuery(query1)
+db.processQuery(testquery)
 end = time.time()
 
 f = open("1query.txt", "w")
 f.write(str(end - start) + " , ")
 
-optQuery = db.optimizer.optimizeQuery(query1)
+optQuery = db.optimizer.optimizeQuery(testquery)
 start = time.time()
 db.processQuery(optQuery)
 end = time.time()
+
+#print(query1.explain())
+#print(" ")
+#print(optQuery.explain())
 
 f.write(str(end - start))
 
 f.close()
 
 
-#result = db.optimizer.pickJoinOrder(query1)
+##result = db.optimizer.pickJoinOrder(query1)
 
 #query = db.query().fromTable('Iabc').join( \
 #  db.query().fromTable('Idef'), method='block-nested-loops', expr='a == d').join( \
