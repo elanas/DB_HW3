@@ -225,8 +225,8 @@ class Optimizer:
         for selectExpr in selectExprList:
           attrList = ExpressionInfo(selectExpr).getAttributes()
           sourceList = [] 
-          for attr in attrList: #Could be more than 2! (a<b or c>1)
-            source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
+          for attr in attrList:
+            source = fieldDict[attr]
             if source not in sourceList:
               sourceList.append(source)
 
@@ -240,8 +240,8 @@ class Optimizer:
         for joinExpr in joinExprList:
           attrList = ExpressionInfo(joinExpr).getAttributes()
           sourceList = [] 
-          for attr in attrList: #Could be more than 2! (a<b or c>1)
-            source = fieldDict[attr]          #TODO ^ check we didnt make a poor assumption somewhere else
+          for attr in attrList:
+            source = fieldDict[attr]
             if source not in sourceList:
               sourceList.append(source)
 
@@ -393,7 +393,6 @@ class Optimizer:
     return exprString
 
   def combineSelects(self,selectExprs):
-    ##TODO: we could sort selects to order based on Selectivity
     selectString = ""
     for s in selectExprs:
       selectString += s
@@ -401,11 +400,6 @@ class Optimizer:
 
     selectString = selectString[:len(selectString) - 5]
     return selectString
-
-  #TODO perhaps combine several of the pre-traversals into one function that finds everything out about
-  # the input plan in one traversal and call it at start of optimize query, passing info into push/reorder
-  # or maybe we do this approach but with 2 traversal, one that we use in pushdown to get all we need there
-  # and one for join ordering
 
   # Optimize the given query plan, returning the resulting improved plan.
   # This should perform operation pushdown, followed by join order selection.
