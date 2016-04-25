@@ -117,39 +117,39 @@ class Optimizer:
   def getPlanCost(self, plan):
     raise NotImplementedError
 
-  def removeUnaryPlan(self, plan):
-    fieldDict = {}
-    selectList = []
-    q = []
-    q.append((plan.root,None, ""))
-
-    while len(q) > 0:
-      (currNode, pNode, sub) = q.pop()
-      if currNode.operatorType() == "Select":
-        selectList.append(currNode)
-        q.append((currNode.subPlan, currNode, "only"))
-        if sub == "only":
-          pNode.subPlan = currNode.subPlan
-        elif sub == "left":
-          pNode.lhsPlan = currNode.subPlan
-        elif sub == "right":
-          pNode.rhsPlan = currNode.subPlan
-        else:
-          plan.root = currNode.subPlan
-      elif currNode.operatorType() == "Project":
-        #TODO add implementation
-        continue
-      elif currNode.operatorType() == "TableScan":
-        for f in currNode.schema().fields:
-          fieldDict[f] = (pNode,sub)
-        continue
-      elif currNode.operatorType() == "GroupBy" or currNode.operatorType() == "Sort":
-        q.append((currNode.subPlan, currNode, "only"))
-      else: #join and union
-        q.append((currNode.lhsPlan, currNode, "left"))
-        q.append((currNode.rhsPlan, currNode, "right"))
-    
-    return (plan,selectList,fieldDict)
+#  def removeUnaryPlan(self, plan):
+#    fieldDict = {}
+#    selectList = []
+#    q = []
+#    q.append((plan.root,None, ""))
+#
+#    while len(q) > 0:
+#      (currNode, pNode, sub) = q.pop()
+#      if currNode.operatorType() == "Select":
+#        selectList.append(currNode)
+#        q.append((currNode.subPlan, currNode, "only"))
+#        if sub == "only":
+#          pNode.subPlan = currNode.subPlan
+#        elif sub == "left":
+#          pNode.lhsPlan = currNode.subPlan
+#        elif sub == "right":
+#          pNode.rhsPlan = currNode.subPlan
+#        else:
+#          plan.root = currNode.subPlan
+#      elif currNode.operatorType() == "Project":
+#        #TODO add implementation
+#        continue
+#      elif currNode.operatorType() == "TableScan":
+#        for f in currNode.schema().fields:
+#          fieldDict[f] = (pNode,sub)
+#        continue
+#      elif currNode.operatorType() == "GroupBy" or currNode.operatorType() == "Sort":
+#        q.append((currNode.subPlan, currNode, "only"))
+#      else: #join and union
+#        q.append((currNode.lhsPlan, currNode, "left"))
+#        q.append((currNode.rhsPlan, currNode, "right"))
+#    
+#    return (plan,selectList,fieldDict)
 
   def decompSelects(self,selectList):
     decompList = []
@@ -164,33 +164,33 @@ class Optimizer:
   # projection operations pushed down to their nearest defining relation
   # This does not need to cascade operators, but should determine a
   # suitable ordering for selection predicates based on the cost model below.
-  def pushdownOperators(self, plan):
-    (removedPlan,selectList,fieldDict) = self.removeUnaryPlan(plan)
-    decompList = self.decompSelects(selectList)
-    
-    for s in decompList:
-      attrList = ExpressionInfo(s.selectExpr).getAttributes()
-
-      if len(attrList) == 1: #TODO should really be number of sources, not num attributes
-        (pNode, sub) = fieldDict[attrList.pop()]
-        if sub == "only":
-          s.subPlan = pNode.subPlan
-          pNode.subPlan = s
-        elif sub == "left":
-          s.subPlan = pNode.lhsPlan
-          pNode.lhsPlan = s
-        elif sub == "right":
-          s.subPlan = pNode.rhsPlan
-          pNode.rhsPlan = s
-        else:
-          s.subPlan = removedPlan.root
-          removedPlan.root = s
-      else:
-        #TODO handle selects with multiple attributes (and dealing with projects)
-        s.subPlan = removedPlan.root
-        removedPlan.root = s
-      
-    return removedPlan
+#  def pushdownOperators(self, plan):
+#    (removedPlan,selectList,fieldDict) = self.removeUnaryPlan(plan)
+#    decompList = self.decompSelects(selectList)
+#    
+#    for s in decompList:
+#      attrList = ExpressionInfo(s.selectExpr).getAttributes()
+#
+#      if len(attrList) == 1: #TODO should really be number of sources, not num attributes
+#        (pNode, sub) = fieldDict[attrList.pop()]
+#        if sub == "only":
+#          s.subPlan = pNode.subPlan
+#          pNode.subPlan = s
+#        elif sub == "left":
+#          s.subPlan = pNode.lhsPlan
+#          pNode.lhsPlan = s
+#        elif sub == "right":
+#          s.subPlan = pNode.rhsPlan
+#          pNode.rhsPlan = s
+#        else:
+#          s.subPlan = removedPlan.root
+#          removedPlan.root = s
+#      else:
+#        #TODO handle selects with multiple attributes (and dealing with projects)
+#        s.subPlan = removedPlan.root
+#        removedPlan.root = s
+#      
+#    return removedPlan
     
   def obtainFieldDict(self, plan):
     q = []
