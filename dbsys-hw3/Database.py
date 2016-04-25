@@ -33,7 +33,7 @@ class Database:
       self.relationMap     = kwargs.get("relations", {})
       self.defaultPageSize = kwargs.get("pageSize", io.DEFAULT_BUFFER_SIZE)
       self.storage         = kwargs.get("storage", StorageEngine(**storageArgs))
-      self.optimizer       = GreedyOptimizer(self)
+      self.optimizer       = Optimizer(self)
 
       checkpointFound = os.path.exists(os.path.join(self.storage.fileMgr.dataDir, Database.checkpointFile))
       restoring       = "restore" in kwargs
